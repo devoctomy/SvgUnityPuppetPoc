@@ -1,4 +1,5 @@
-﻿using Svg;
+﻿using Newtonsoft.Json.Linq;
+using Svg;
 using Svg.Transforms;
 using System;
 using System.Drawing;
@@ -12,6 +13,9 @@ namespace SvgCharPrep
         {
             var svgDocument = SvgDocument.Open(@"D:\Source\Characters\Vector\Test.svg");
 
+            var json = new JObject();
+            var parts = new JArray();
+
             var fullCopy = svgDocument.Draw();
             fullCopy.Save($"c:\\Temp\\svg\\Test_fullraster.bmp");
 
@@ -21,8 +25,6 @@ namespace SvgCharPrep
             for (int curLayer = 0; curLayer < layers.Count(); curLayer++)
             {
                 var layer = layers[curLayer] as SvgGroup;
-                Console.WriteLine($"Checking layer {layer.ID}");
-
                 var pivot = PointF.Empty;
                 var pivotPoint = layer.Children.SingleOrDefault(x => !string.IsNullOrEmpty(x.ID) && x.ID.StartsWith("pivot", StringComparison.InvariantCultureIgnoreCase));
                 if (pivotPoint != null)
@@ -55,19 +57,25 @@ namespace SvgCharPrep
                     new RectangleF(0, 0, layer.Bounds.Width, layer.Bounds.Height),
                     layer.Bounds,
                     GraphicsUnit.Pixel);
-                cropped.Save($"c:\\Temp\\svg\\Test_croppedraster_{layer.ID}.png", System.Drawing.Imaging.ImageFormat.Png);
-
-                partcopy.Save($"c:\\Temp\\svg\\Test_partisolateraster_{layer.ID}.bmp");
+                var croppedPdfPath = $"c:\\Temp\\svg\\Test_croppedraster_{layer.ID}.png";
+                cropped.Save(croppedPdfPath, System.Drawing.Imaging.ImageFormat.Png);
                 partcopy.Dispose();
+
                 svgDocument.Children.Clear();
-                
-                //generate json containing details of each part
-                //desired location (translated from centre)
-                //pivot point
-                //name
+
+                var partJson = new JObject();
+                partJson.Add("Name", new JValue(layer.ID));
+                partJson.Add("LocalPivotPoint", new JValue($"{pivot.X - layer.Bounds.X},{pivot.Y - layer.Bounds.Y}"));
+                partJson.Add("WorldBounds", new JValue($"{layer.Bounds.X},{layer.Bounds.Y},{layer.Bounds.Width},{layer.Bounds.Height}"));
+                partJson.Add("ImageBase64Data", new JValue(Convert.ToBase64String(System.IO.File.ReadAllBytes(croppedPdfPath))));
+                parts.Add(partJson);
             }
 
             fullCopy.Dispose();
+
+            json.Add("Parts", parts);
+            var jsonString = json.ToString(Newtonsoft.Json.Formatting.Indented);
+            System.IO.File.WriteAllText("c:\\Temp\\svg\\metadata.puppet", jsonString);
         }
     }
 }
